@@ -1,4 +1,3 @@
-// app/auth.ts (or lib/auth.ts)
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { NextAuthConfig } from "next-auth";
