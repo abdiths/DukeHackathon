@@ -16,8 +16,13 @@ import { Upload, FileText, MessageSquare, Brain } from "lucide-react";
 import { useSession } from "next-auth/react";
 import VoiceChat from "../VoiceChat";
 
+interface FileWithPreview extends File {
+  preview?: string;
+  path?: string;
+}
+
 export default function DashboardPage() {
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
   const { data: session } = useSession();
@@ -30,7 +35,11 @@ export default function DashboardPage() {
 
     setUploading(true);
     try {
-      const newFiles = Array.from(fileList);
+      const newFiles = Array.from(fileList).map((file) => ({
+        ...file,
+        preview: URL.createObjectURL(file),
+        path: file.name,
+      }));
       setFiles((prev) => [...prev, ...newFiles]);
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulated upload
       setActiveTab("chat");
@@ -43,6 +52,14 @@ export default function DashboardPage() {
 
   const handleViewClick = () => {
     setActiveTab("chat");
+  };
+
+  const cleanupPreviews = () => {
+    files.forEach((file) => {
+      if (file.preview) {
+        URL.revokeObjectURL(file.preview);
+      }
+    });
   };
 
   return (
@@ -106,6 +123,7 @@ export default function DashboardPage() {
                     accept=".pdf,.doc,.docx,.txt,.ppt,.pptx"
                     onChange={handleFileUpload}
                     disabled={uploading}
+                    multiple
                   />
                 </div>
 
@@ -192,7 +210,7 @@ export default function DashboardPage() {
                     AI!
                   </div>
                 ) : (
-                  <VoiceChat />
+                  <VoiceChat files={files} />
                 )}
               </CardContent>
             </Card>
@@ -207,9 +225,15 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  Select a document to generate a quiz from its contents!
-                </div>
+                {files.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    Upload some materials first to generate quizzes!
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Select a document to generate a quiz from its contents!
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

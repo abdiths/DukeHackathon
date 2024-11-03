@@ -1,181 +1,198 @@
-import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Play, Square } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Mic, Speaker, Send } from "lucide-react";
+import OpenAI from "openai";
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
 
 interface Message {
-  role: "user" | "assistant";
-  content: string;
+  text: string;
+  type: "user" | "assistant";
 }
 
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-  }
-}
-
-export default function VoiceChat() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+export default function VoiceChat({ files }: { files: File[] }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [transcript, setTranscript] = useState("");
+  const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const audioChunks = useRef<Blob[]>([]);
-  const recognitionRef = useRef<any>(null);
-
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    // Initialize speech recognition
-    if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onresult = (event: any) => {
-        const current = event.resultIndex;
-        const transcript = event.results[current][0].transcript;
-        setTranscript(transcript);
-      };
-
-      recognitionRef.current = recognition;
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
-  }, []);
+  }, [messages]);
 
-  const startRecording = async () => {
+  const generateSpeech = async (text: string) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-      audioChunks.current = [];
+      setIsSpeaking(true);
+      const response = await fetch("/api/speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      });
 
-      mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
-
-      mediaRecorder.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunks.current, { type: "audio/wav" });
-        // Here you would typically send the audioBlob to your AI service
-        // For now, we'll just add the transcript to messages
-        if (transcript) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", content: transcript },
-          ]);
-          // Simulate AI response
-          setTimeout(() => {
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: `I understood your message: "${transcript}". How can I help you learn about this topic?`,
-              },
-            ]);
-          }, 1000);
-        }
-      };
-
-      mediaRecorder.current.start();
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
+      if (!response.ok) {
+        throw new Error("Failed to generate speech");
       }
-      setIsRecording(true);
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.onended = () => setIsSpeaking(false);
+        await audioRef.current.play();
+      }
     } catch (error) {
-      console.error("Error starting recording:", error);
+      console.error("Error generating speech:", error);
+      setIsSpeaking(false);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorder.current) {
-      mediaRecorder.current.stop();
+  const getAIResponse = async (userMessage: string) => {
+    try {
+      // Create context from uploaded files
+      let context = "You are a helpful AI assistant named Wiz AI. ";
+      if (files.length > 0) {
+        context +=
+          "The user has uploaded the following files: " +
+          files.map((f) => f.name).join(", ") +
+          ". ";
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: context },
+          ...messages.map((msg) => ({
+            role: msg.type === "user" ? "user" : ("assistant" as const),
+            content: msg.text,
+          })),
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      return (
+        completion.choices[0]?.message?.content ||
+        "I'm sorry, I couldn't generate a response."
+      );
+    } catch (error) {
+      console.error("Error getting AI response:", error);
+      return "I apologize, but I encountered an error while processing your request.";
     }
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setIsRecording(false);
-    setTranscript("");
   };
 
-  const playResponse = async (message: string) => {
-    if ("speechSynthesis" in window) {
-      setIsPlaying(true);
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.onend = () => setIsPlaying(false);
-      speechSynthesis.speak(utterance);
-    }
-  };
+  const handleSend = async () => {
+    if (!inputText.trim() || isLoading) return;
 
-  const stopPlaying = () => {
-    speechSynthesis.cancel();
-    setIsPlaying(false);
+    // Add user message
+    const userMessage = { text: inputText, type: "user" as const };
+    setMessages((prev) => [...prev, userMessage]);
+    setInputText("");
+
+    // Get AI response
+    setIsLoading(true);
+    try {
+      const aiResponse = await getAIResponse(inputText);
+      const assistantMessage = { text: aiResponse, type: "assistant" as const };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Error in chat:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="flex flex-col h-[600px]">
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+        <div className="space-y-4">
+          {messages.map((message, index) => (
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
-                message.role === "user"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-900"
+              key={index}
+              className={`flex ${
+                message.type === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <p>{message.content}</p>
-                {message.role === "assistant" && (
+              <div
+                className={`max-w-[80%] p-3 rounded-lg ${
+                  message.type === "user"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-900"
+                }`}
+              >
+                <p>{message.text}</p>
+                {message.type === "assistant" && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() =>
-                      isPlaying ? stopPlaying() : playResponse(message.content)
-                    }
+                    className="mt-2"
+                    onClick={() => generateSpeech(message.text)}
+                    disabled={isSpeaking}
                   >
-                    {isPlaying ? (
-                      <Square className="h-4 w-4" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
+                    <Speaker className="w-4 h-4 mr-2" />
+                    {isSpeaking ? "Speaking..." : "Listen"}
                   </Button>
                 )}
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] p-3 rounded-lg bg-gray-100">
+                <p className="animate-pulse">Thinking...</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
 
-      {/* Recording Interface */}
-      <div className="border-t p-4">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            {transcript && (
-              <p className="text-sm text-gray-600">
-                Current transcript: {transcript}
-              </p>
-            )}
+      <div className="p-4 border-t">
+        <div className="flex gap-2">
+          <Textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="Type your message..."
+            className="flex-1"
+            rows={3}
+          />
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !inputText.trim()}
+              className="flex-1"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Send
+            </Button>
+            <Button variant="outline" className="flex-1" disabled={isLoading}>
+              <Mic className="w-4 h-4 mr-2" />
+              Voice
+            </Button>
           </div>
-          <Button
-            onClick={isRecording ? stopRecording : startRecording}
-            variant={isRecording ? "destructive" : "default"}
-          >
-            {isRecording ? (
-              <>
-                <MicOff className="h-4 w-4 mr-2" /> Stop Recording
-              </>
-            ) : (
-              <>
-                <Mic className="h-4 w-4 mr-2" /> Start Recording
-              </>
-            )}
-          </Button>
         </div>
       </div>
+
+      <audio ref={audioRef} className="hidden" />
     </div>
   );
 }
