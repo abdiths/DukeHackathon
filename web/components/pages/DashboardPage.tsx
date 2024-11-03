@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, FileText, MessageSquare, Brain, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import VoiceChat from "../VoiceChat";
+import QuizPage from "./QuizPage";
 
-// Add local storage helpers
 const LOCAL_STORAGE_KEYS = {
-  FILES: 'wiz-ai-files',
-  MESSAGES: 'wiz-ai-messages',
+  FILES: "wiz-ai-files",
+  MESSAGES: "wiz-ai-messages",
 };
 
 interface FileWithPreview extends File {
@@ -37,9 +37,11 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
+  const [activeQuizFile, setActiveQuizFile] = useState<FileWithPreview | null>(
+    null
+  );
   const { data: session } = useSession();
 
-  // Load saved files and messages from localStorage
   useEffect(() => {
     const loadSavedData = () => {
       const savedFiles = localStorage.getItem(LOCAL_STORAGE_KEYS.FILES);
@@ -47,12 +49,14 @@ export default function DashboardPage() {
 
       if (savedFiles) {
         const parsedFiles = JSON.parse(savedFiles);
-        setFiles(parsedFiles.map((file: any) => {
-          // Recreate File objects from stored data
-          return new File([new Blob()], file.name, {
-            type: file.type,
-          }) as FileWithPreview;
-        }));
+        setFiles(
+          parsedFiles.map((file: any) => {
+            // Recreate File objects from stored data
+            return new File([new Blob()], file.name, {
+              type: file.type,
+            }) as FileWithPreview;
+          })
+        );
       }
 
       if (savedMessages) {
@@ -63,9 +67,8 @@ export default function DashboardPage() {
     loadSavedData();
   }, []);
 
-  // Save files and messages to localStorage when they change
   useEffect(() => {
-    const filesToSave = files.map(file => ({
+    const filesToSave = files.map((file) => ({
       name: file.name,
       type: file.type,
       size: file.size,
@@ -104,7 +107,7 @@ export default function DashboardPage() {
   };
 
   const handleRemoveFile = (indexToRemove: number) => {
-    setFiles(prevFiles => {
+    setFiles((prevFiles) => {
       const newFiles = prevFiles.filter((_, index) => index !== indexToRemove);
       return newFiles;
     });
@@ -114,7 +117,13 @@ export default function DashboardPage() {
     setActiveTab("chat");
   };
 
-  const FileItem = ({ file, index }: { file: FileWithPreview; index: number }) => {
+  const FileItem = ({
+    file,
+    index,
+  }: {
+    file: FileWithPreview;
+    index: number;
+  }) => {
     const [showDelete, setShowDelete] = useState(false);
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
 
@@ -156,7 +165,6 @@ export default function DashboardPage() {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          {/* TabsList remains the same */}
           <TabsList>
             <TabsTrigger value="upload">
               <Upload className="w-4 h-4 mr-2" />
@@ -253,16 +261,28 @@ export default function DashboardPage() {
                               </p>
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleViewClick}
-                          >
-                            Talk with Wiz AI
-                          </Button>
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleViewClick}
+                            >
+                              Talk with Wiz AI
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => {
+                                setActiveQuizFile(file);
+                                setActiveTab("quiz");
+                              }}
+                            >
+                              Take a Quiz
+                            </Button>
+                          </div>
                         </div>
-                      )}
-                    )}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -274,16 +294,18 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle>Learning Assistant</CardTitle>
                 <CardDescription>
-                  Chat with Wiz AI about your learning materials using voice or text
+                  Chat with Wiz AI about your learning materials using voice or
+                  text
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {files.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    Upload some learning materials to start chatting with Wiz AI!
+                    Upload some learning materials to start chatting with Wiz
+                    AI!
                   </div>
                 ) : (
-                  <VoiceChat 
+                  <VoiceChat
                     files={files}
                     messages={messages}
                     setMessages={setMessages}
@@ -292,7 +314,6 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </TabsContent>
-
 
           <TabsContent value="quiz">
             <Card>
@@ -307,9 +328,37 @@ export default function DashboardPage() {
                   <div className="text-center py-8 text-gray-500">
                     Upload some materials first to generate quizzes!
                   </div>
+                ) : activeQuizFile ? (
+                  <QuizPage
+                    fileName={activeQuizFile.name}
+                    fileContent={activeQuizFile.preview}
+                    onClose={() => setActiveQuizFile(null)}
+                  />
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    Select a document to generate a quiz from its contents!
+                  <div className="grid gap-4">
+                    {files.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-4 bg-white rounded-lg border"
+                      >
+                        <div className="flex items-center">
+                          <FileText className="w-5 h-5 mr-3 text-blue-500" />
+                          <div>
+                            <h4 className="font-medium">{file.name}</h4>
+                            <p className="text-sm text-gray-500">
+                              Click to generate a quiz from this material
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveQuizFile(file)}
+                        >
+                          Start Quiz
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
