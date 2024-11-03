@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,20 +12,70 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, FileText, MessageSquare, Brain } from "lucide-react";
+import { Upload, FileText, MessageSquare, Brain, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import VoiceChat from "../VoiceChat";
+
+// Add local storage helpers
+const LOCAL_STORAGE_KEYS = {
+  FILES: 'wiz-ai-files',
+  MESSAGES: 'wiz-ai-messages',
+};
 
 interface FileWithPreview extends File {
   preview?: string;
   path?: string;
 }
 
+interface Message {
+  text: string;
+  type: "user" | "assistant";
+}
+
 export default function DashboardPage() {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("upload");
   const { data: session } = useSession();
+
+  // Load saved files and messages from localStorage
+  useEffect(() => {
+    const loadSavedData = () => {
+      const savedFiles = localStorage.getItem(LOCAL_STORAGE_KEYS.FILES);
+      const savedMessages = localStorage.getItem(LOCAL_STORAGE_KEYS.MESSAGES);
+
+      if (savedFiles) {
+        const parsedFiles = JSON.parse(savedFiles);
+        setFiles(parsedFiles.map((file: any) => {
+          // Recreate File objects from stored data
+          return new File([new Blob()], file.name, {
+            type: file.type,
+          }) as FileWithPreview;
+        }));
+      }
+
+      if (savedMessages) {
+        setMessages(JSON.parse(savedMessages));
+      }
+    };
+
+    loadSavedData();
+  }, []);
+
+  // Save files and messages to localStorage when they change
+  useEffect(() => {
+    const filesToSave = files.map(file => ({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    }));
+    localStorage.setItem(LOCAL_STORAGE_KEYS.FILES, JSON.stringify(filesToSave));
+  }, [files]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+  }, [messages]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -53,16 +103,42 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRemoveFile = (indexToRemove: number) => {
+    setFiles(prevFiles => {
+      const newFiles = prevFiles.filter((_, index) => index !== indexToRemove);
+      return newFiles;
+    });
+  };
+
   const handleViewClick = () => {
     setActiveTab("chat");
   };
 
-  const cleanupPreviews = () => {
-    files.forEach((file) => {
-      if (file.preview) {
-        URL.revokeObjectURL(file.preview);
-      }
-    });
+  const FileItem = ({ file, index }: { file: FileWithPreview; index: number }) => {
+    const [showDelete, setShowDelete] = useState(false);
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+
+    return (
+      <div
+        className="relative flex items-center p-2 bg-white rounded-md border group"
+        onMouseEnter={() => setShowDelete(true)}
+        onMouseLeave={() => setShowDelete(false)}
+      >
+        <FileText className="w-4 h-4 mr-2 text-blue-500" />
+        <span className="flex-1">{file.name}</span>
+        <span className="text-sm text-gray-500 mr-2">{fileSizeMB} MB</span>
+        {showDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -right-2 -top-2 h-6 w-6 rounded-full bg-red-500 hover:bg-red-600 text-white"
+            onClick={() => handleRemoveFile(index)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -80,6 +156,7 @@ export default function DashboardPage() {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
+          {/* TabsList remains the same */}
           <TabsList>
             <TabsTrigger value="upload">
               <Upload className="w-4 h-4 mr-2" />
@@ -134,22 +211,9 @@ export default function DashboardPage() {
                   <div className="mt-4">
                     <h3 className="font-medium mb-2">Uploaded Files</h3>
                     <div className="space-y-2">
-                      {files.map((file, index) => {
-                        // Calculate file size in MB with 2 decimal places
-                        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                        return (
-                          <div
-                            key={index}
-                            className="flex items-center p-2 bg-white rounded-md border"
-                          >
-                            <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                            <span className="flex-1">{file.name}</span>
-                            <span className="text-sm text-gray-500">
-                              {fileSizeMB} MB
-                            </span>
-                          </div>
-                        );
-                      })}
+                      {files.map((file, index) => (
+                        <FileItem key={index} file={file} index={index} />
+                      ))}
                     </div>
                   </div>
                 )}
@@ -210,8 +274,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle>Learning Assistant</CardTitle>
                 <CardDescription>
-                  Chat with Wiz AI about your learning materials using voice or
-                  text
+                  Chat with Wiz AI about your learning materials using voice or text
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -220,11 +283,16 @@ export default function DashboardPage() {
                     Upload some learning materials to start chatting with Wiz AI!
                   </div>
                 ) : (
-                  <VoiceChat files={files} />
+                  <VoiceChat 
+                    files={files}
+                    messages={messages}
+                    setMessages={setMessages}
+                  />
                 )}
               </CardContent>
             </Card>
           </TabsContent>
+
 
           <TabsContent value="quiz">
             <Card>
