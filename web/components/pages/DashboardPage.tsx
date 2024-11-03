@@ -17,6 +17,7 @@ import { Upload, FileText, MessageSquare, Brain } from "lucide-react";
 export default function DashboardPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState("upload");
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -26,15 +27,19 @@ export default function DashboardPage() {
 
     setUploading(true);
     try {
-      // Here you would typically upload the files to your storage
       const newFiles = Array.from(fileList);
       setFiles((prev) => [...prev, ...newFiles]);
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulated upload
+      setActiveTab("chat"); // Automatically switch to chat tab after upload
     } catch (error) {
       console.error("Error uploading files:", error);
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleViewClick = () => {
+    setActiveTab("chat");
   };
 
   return (
@@ -47,7 +52,11 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="upload" className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
           <TabsList>
             <TabsTrigger value="upload">
               <Upload className="w-4 h-4 mr-2" />
@@ -59,7 +68,7 @@ export default function DashboardPage() {
             </TabsTrigger>
             <TabsTrigger value="chat">
               <MessageSquare className="w-4 h-4 mr-2" />
-              AI Chat
+              Wiz AI
             </TabsTrigger>
             <TabsTrigger value="quiz">
               <Brain className="w-4 h-4 mr-2" />
@@ -149,8 +158,12 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">
-                          View
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleViewClick}
+                        >
+                          Talk with Wiz AI
                         </Button>
                       </div>
                     ))}
@@ -163,15 +176,16 @@ export default function DashboardPage() {
           <TabsContent value="chat">
             <Card>
               <CardHeader>
-                <CardTitle>AI Study Assistant</CardTitle>
+                <CardTitle>Wiz AI Assistant</CardTitle>
                 <CardDescription>
-                  Chat with your AI tutor about your learning materials
+                  Chat with Wiz AI about your learning materials
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {/* Chat interface would go here */}
                 <div className="text-center py-8 text-gray-500">
-                  Select a document to start chatting about its contents!
+                  Select a document to start chatting with Wiz AI about its
+                  contents!
                 </div>
               </CardContent>
             </Card>
