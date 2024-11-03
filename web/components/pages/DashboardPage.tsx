@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -28,18 +28,21 @@ export default function DashboardPage() {
   const { data: session } = useSession();
 
   const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const fileList = event.target.files;
     if (!fileList) return;
 
     setUploading(true);
     try {
-      const newFiles = Array.from(fileList).map((file) => ({
-        ...file,
-        preview: URL.createObjectURL(file),
-        path: file.name,
-      }));
+      const newFiles = Array.from(fileList).map((file) => {
+        const newFile = new File([file], file.name, {
+          type: file.type,
+        }) as FileWithPreview;
+        newFile.preview = URL.createObjectURL(file);
+        newFile.path = file.name;
+        return newFile;
+      });
       setFiles((prev) => [...prev, ...newFiles]);
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulated upload
       setActiveTab("chat");
@@ -82,13 +85,13 @@ export default function DashboardPage() {
               <Upload className="w-4 h-4 mr-2" />
               Upload
             </TabsTrigger>
-            <TabsTrigger value="content">
-              <FileText className="w-4 h-4 mr-2" />
-              My Content
-            </TabsTrigger>
             <TabsTrigger value="chat">
               <MessageSquare className="w-4 h-4 mr-2" />
               Wiz AI
+            </TabsTrigger>
+            <TabsTrigger value="content">
+              <FileText className="w-4 h-4 mr-2" />
+              My Content
             </TabsTrigger>
             <TabsTrigger value="quiz">
               <Brain className="w-4 h-4 mr-2" />
@@ -99,7 +102,7 @@ export default function DashboardPage() {
           <TabsContent value="upload" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Upload Learning Material</CardTitle>
+                <CardTitle>Upload Material</CardTitle>
                 <CardDescription>
                   Upload your lecture notes, slides, or any study material
                 </CardDescription>
@@ -127,23 +130,29 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                <div className="mt-4">
-                  <h3 className="font-medium mb-2">Uploaded Files</h3>
-                  <div className="space-y-2">
-                    {files.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center p-2 bg-white rounded-md border"
-                      >
-                        <FileText className="w-4 h-4 mr-2 text-blue-500" />
-                        <span className="flex-1">{file.name}</span>
-                        <span className="text-sm text-gray-500">
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
-                        </span>
-                      </div>
-                    ))}
+                {files.length > 0 && (
+                  <div className="mt-4">
+                    <h3 className="font-medium mb-2">Uploaded Files</h3>
+                    <div className="space-y-2">
+                      {files.map((file, index) => {
+                        // Calculate file size in MB with 2 decimal places
+                        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center p-2 bg-white rounded-md border"
+                          >
+                            <FileText className="w-4 h-4 mr-2 text-blue-500" />
+                            <span className="flex-1">{file.name}</span>
+                            <span className="text-sm text-gray-500">
+                              {fileSizeMB} MB
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -151,7 +160,7 @@ export default function DashboardPage() {
           <TabsContent value="content">
             <Card>
               <CardHeader>
-                <CardTitle>My Learning Content</CardTitle>
+                <CardTitle>Academic Content</CardTitle>
                 <CardDescription>
                   Access and manage your uploaded materials
                 </CardDescription>
@@ -164,30 +173,32 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {files.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-4 bg-white rounded-lg border"
-                      >
-                        <div className="flex items-center">
-                          <FileText className="w-5 h-5 mr-3 text-blue-500" />
-                          <div>
-                            <h4 className="font-medium">{file.name}</h4>
-                            <p className="text-sm text-gray-500">
-                              Uploaded just now •{" "}
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleViewClick}
+                    {files.map((file, index) => {
+                      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-4 bg-white rounded-lg border"
                         >
-                          Talk with Wiz AI
-                        </Button>
-                      </div>
-                    ))}
+                          <div className="flex items-center">
+                            <FileText className="w-5 h-5 mr-3 text-blue-500" />
+                            <div>
+                              <h4 className="font-medium">{file.name}</h4>
+                              <p className="text-sm text-gray-500">
+                                Uploaded just now • {fileSizeMB} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleViewClick}
+                          >
+                            Talk with Wiz AI
+                          </Button>
+                        </div>
+                      )}
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -197,7 +208,7 @@ export default function DashboardPage() {
           <TabsContent value="chat">
             <Card>
               <CardHeader>
-                <CardTitle>Wiz AI Assistant</CardTitle>
+                <CardTitle>Learning Assistant</CardTitle>
                 <CardDescription>
                   Chat with Wiz AI about your learning materials using voice or
                   text
@@ -206,8 +217,7 @@ export default function DashboardPage() {
               <CardContent>
                 {files.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    Upload some learning materials to start chatting with Wiz
-                    AI!
+                    Upload some learning materials to start chatting with Wiz AI!
                   </div>
                 ) : (
                   <VoiceChat files={files} />

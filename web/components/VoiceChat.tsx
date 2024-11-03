@@ -2,10 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, Speaker, Send } from "lucide-react";
+import { Mic, Speaker, Send, FileText } from "lucide-react";
 import OpenAI from "openai";
 
-// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true,
@@ -16,13 +15,28 @@ interface Message {
   type: "user" | "assistant";
 }
 
-export default function VoiceChat({ files }: { files: File[] }) {
+interface FileWithPreview extends File {
+  preview?: string;
+  path?: string;
+}
+
+export default function VoiceChat({ files }: { files: FileWithPreview[] }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const welcomeMessage = {
+      text: "Hey there! 👋 I'm Wiz AI, your AI learning assistant! I've noticed you've uploaded " + 
+      (files.length === 1 ? "a document" : files.length + " documents") + 
+      ". I'm here to help you understand the material, quiz you on the content, or just chat about what you're learning. What would you like to focus on today?",
+      type: "assistant" as const
+    };
+    setMessages([welcomeMessage]);
+  }, [files]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -62,24 +76,27 @@ export default function VoiceChat({ files }: { files: File[] }) {
 
   const getAIResponse = async (userMessage: string) => {
     try {
-      // Create context from uploaded files
-      let context = "You are a helpful AI assistant named Wiz AI. ";
-      if (files.length > 0) {
-        context +=
-          "The user has uploaded the following files: " +
-          files.map((f) => f.name).join(", ") +
-          ". ";
-      }
+      let context = `You are Wiz AI, a friendly and encouraging learning assistant. You should:
+      - Be conversational and enthusiastic about helping students learn
+      - Use emoji occasionally to keep the tone light and engaging
+      - Break down complex topics into simpler terms
+      - Provide examples and analogies to help understanding
+      - Ask follow-up questions to ensure understanding
+      - Encourage critical thinking rather than just giving answers
+      - Be supportive and motivating
+      
+      The user has uploaded the following files: ${files.map(f => f.name).join(", ")}. 
+      Refer to these materials in your responses when relevant.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: context },
+          { role: "system" as const, content: context },
           ...messages.map((msg) => ({
-            role: msg.type === "user" ? "user" : ("assistant" as const),
+            role: msg.type as "user" | "assistant",
             content: msg.text,
           })),
-          { role: "user", content: userMessage },
+          { role: "user" as const, content: userMessage },
         ],
         temperature: 0.7,
         max_tokens: 500,
@@ -98,12 +115,10 @@ export default function VoiceChat({ files }: { files: File[] }) {
   const handleSend = async () => {
     if (!inputText.trim() || isLoading) return;
 
-    // Add user message
     const userMessage = { text: inputText, type: "user" as const };
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
 
-    // Get AI response
     setIsLoading(true);
     try {
       const aiResponse = await getAIResponse(inputText);
@@ -118,6 +133,22 @@ export default function VoiceChat({ files }: { files: File[] }) {
 
   return (
     <div className="flex flex-col h-[600px]">
+      {/* Uploaded Files Section */}
+      <div className="p-4 border-b bg-gray-50">
+        <h3 className="text-sm font-medium mb-2">Uploaded Materials:</h3>
+        <div className="flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <div
+              key={index}
+              className="flex items-center p-2 bg-white rounded-md border text-sm"
+            >
+              <FileText className="w-4 h-4 mr-2 text-blue-500" />
+              <span>{file.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map((message, index) => (
@@ -134,7 +165,7 @@ export default function VoiceChat({ files }: { files: File[] }) {
                     : "bg-gray-100 text-gray-900"
                 }`}
               >
-                <p>{message.text}</p>
+                <p className="whitespace-pre-wrap">{message.text}</p>
                 {message.type === "assistant" && (
                   <Button
                     variant="ghost"
@@ -171,7 +202,7 @@ export default function VoiceChat({ files }: { files: File[] }) {
                 handleSend();
               }
             }}
-            placeholder="Type your message..."
+            placeholder="Ask me anything about your materials..."
             className="flex-1"
             rows={3}
           />
